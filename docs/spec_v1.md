@@ -91,6 +91,19 @@ ai-team resume <run-id>
 
 The starting model provider is Google/Gemini. Provider and model should be configurable, but v1 uses one provider/model configuration across all agents.
 
+## System Testing
+
+The AI Software Team System uses `pytest` for v1 tests.
+
+Milestone 1 tests should cover:
+
+- run directory creation
+- `state.json` persistence
+- `events.jsonl` logging
+- CLI `status` behavior
+- CLI `resume <run-id>` behavior
+- Langfuse-disabled fallback behavior
+
 ## Target Project Defaults
 
 When modifying an existing Target Project, agents follow the existing stack.

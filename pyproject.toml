@@ -1,0 +1,22 @@
+[project]
+name = "ai-software-team"
+version = "0.1.0"
+description = "Learning-first AI Software Team walking skeleton."
+readme = "CONTEXT.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langfuse>=4.5.1",
+]
+
+[project.scripts]
+ai-team = "ai_software_team.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
