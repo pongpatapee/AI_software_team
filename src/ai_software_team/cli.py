@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -43,6 +44,16 @@ def build_parser() -> argparse.ArgumentParser:
     resume = subcommands.add_parser("resume", help="Load a resumable run")
     resume.add_argument("run_id")
     resume.add_argument("--target-project", type=Path, default=Path.cwd())
+    resume.add_argument(
+        "--approve-issues",
+        action="store_true",
+        help="Approve the Issue Breakdown checkpoint and create GitHub issues.",
+    )
+    resume.add_argument(
+        "--child-issues",
+        action="store_true",
+        help="Also create child issues for plan tasks when they add clarity.",
+    )
 
     return parser
 
@@ -121,18 +132,50 @@ def resume_command(args: argparse.Namespace) -> int:
             state = resume_run(args.target_project, args.run_id)
             tracer.event("pm.run.resumed", {"run_id": state["run_id"]})
 
+            run_dir = (
+                args.target_project.resolve()
+                / ".ai-team"
+                / "runs"
+                / state["run_id"]
+            )
+
             if _should_run_planning(state):
                 from ai_software_team.orchestration import run_planning_phase
 
-                run_dir = (
-                    args.target_project.resolve()
-                    / ".ai-team"
-                    / "runs"
-                    / state["run_id"]
-                )
                 tracer.event("pm.planning.started", {"run_id": state["run_id"]})
-                state = run_planning_phase(run_dir, args.target_project.resolve(), model=_resolve_model())
+                state = run_planning_phase(
+                    run_dir, args.target_project.resolve(), model=_resolve_model()
+                )
                 tracer.event("pm.planning.completed", {"run_id": state["run_id"]})
+
+            if args.approve_issues:
+                state = _approve_issue_breakdown(run_dir)
+
+            if _should_run_issue_breakdown(state):
+                from ai_software_team.github_adapter import (
+                    GitHubAdapterError,
+                    adapter_from_env,
+                )
+                from ai_software_team.issue_breakdown import run_issue_breakdown_phase
+
+                adapter = adapter_from_env(
+                    dict(os.environ), str(args.target_project.resolve())
+                )
+                tracer.event(
+                    "pm.issue_breakdown.started", {"run_id": state["run_id"]}
+                )
+                try:
+                    state = run_issue_breakdown_phase(
+                        run_dir,
+                        adapter=adapter,
+                        include_child_issues=args.child_issues,
+                    )
+                except GitHubAdapterError as error:
+                    print(f"Issue creation failed: {error}", file=sys.stderr)
+                    return 1
+                tracer.event(
+                    "pm.issue_breakdown.completed", {"run_id": state["run_id"]}
+                )
     except FileNotFoundError as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -140,13 +183,40 @@ def resume_command(args: argparse.Namespace) -> int:
     print(f"Resumed run {state['run_id']}")
     print(f"Current phase: {state['phase']}")
     print(f"Status: {state['status']}")
+    if state.get("phase") == "planning" and not state.get("approval", {}).get(
+        "issue_breakdown_approved", False
+    ):
+        print(
+            "Awaiting Approval Checkpoint: rerun with --approve-issues to create "
+            "GitHub issues."
+        )
     return 0
+
+
+def _approve_issue_breakdown(run_dir: Path) -> dict:
+    from ai_software_team.runs import append_event, timestamp, write_json
+
+    state_path = run_dir / "state.json"
+    state = json.loads(state_path.read_text())
+    approval = state.setdefault("approval", {})
+    approval["issue_breakdown_approved"] = True
+    state["updated_at"] = timestamp()
+    write_json(state_path, state)
+    append_event(run_dir, "approval.granted", {"checkpoint": "issue_breakdown"})
+    return state
 
 
 def _should_run_planning(state: dict) -> bool:
     return (
         state.get("phase") == "discovery"
         and state.get("approval", {}).get("discovery_gate_approved", False)
+    )
+
+
+def _should_run_issue_breakdown(state: dict) -> bool:
+    return (
+        state.get("phase") == "planning"
+        and state.get("approval", {}).get("issue_breakdown_approved", False)
     )
 
 
