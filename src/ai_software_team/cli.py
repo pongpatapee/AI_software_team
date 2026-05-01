@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -79,6 +80,19 @@ def resume_command(args: argparse.Namespace) -> int:
         with SystemTracer() as tracer:
             state = resume_run(args.target_project, args.run_id)
             tracer.event("pm.run.resumed", {"run_id": state["run_id"]})
+
+            if _should_run_planning(state):
+                from ai_software_team.orchestration import run_planning_phase
+
+                run_dir = (
+                    args.target_project.resolve()
+                    / ".ai-team"
+                    / "runs"
+                    / state["run_id"]
+                )
+                tracer.event("pm.planning.started", {"run_id": state["run_id"]})
+                state = run_planning_phase(run_dir, args.target_project.resolve(), model=_resolve_model())
+                tracer.event("pm.planning.completed", {"run_id": state["run_id"]})
     except FileNotFoundError as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -87,6 +101,28 @@ def resume_command(args: argparse.Namespace) -> int:
     print(f"Current phase: {state['phase']}")
     print(f"Status: {state['status']}")
     return 0
+
+
+def _should_run_planning(state: dict) -> bool:
+    return (
+        state.get("phase") == "discovery"
+        and state.get("approval", {}).get("discovery_gate_approved", False)
+    )
+
+
+def _resolve_model():
+    """Return a model for agent invocations. Supports AI_TEAM_TEST_MODEL=fake for tests."""
+    if os.getenv("AI_TEAM_TEST_MODEL") == "fake":
+        from ai_software_team.agents.testing import FakeLlm
+
+        return FakeLlm(
+            responses=[
+                "Spec confirmed. Requirements are clear.",
+                "## Implementation Plan\n\n### Tasks\n1. Implement the requested changes.",
+            ]
+        )
+    model_name = os.getenv("AI_TEAM_MODEL", "gemini-2.0-flash")
+    return model_name
 
 
 def format_state(state: dict[str, object]) -> str:

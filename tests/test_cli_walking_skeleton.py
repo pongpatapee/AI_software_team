@@ -5,10 +5,14 @@ import sys
 from pathlib import Path
 
 
-def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    args: list[str], cwd: Path, env_overrides: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     src_path = str(Path(__file__).resolve().parents[1] / "src")
     env["PYTHONPATH"] = src_path
+    if env_overrides:
+        env.update(env_overrides)
     return subprocess.run(
         [sys.executable, "-m", "ai_software_team.cli", *args],
         cwd=cwd,
@@ -102,18 +106,23 @@ def test_resume_loads_existing_run_and_records_timeline_event(tmp_path: Path) ->
     target_project.mkdir()
     run_id, _ = start_discovered_run(target_project)
 
+    # Approved runs advance through planning; use fake model for determinism.
     result = run_cli(
         ["resume", run_id, "--target-project", str(target_project)],
         cwd=Path.cwd(),
+        env_overrides={"AI_TEAM_TEST_MODEL": "fake"},
     )
 
     assert result.returncode == 0, result.stderr
     assert f"Resumed run {run_id}" in result.stdout
-    assert "Current phase: discovery" in result.stdout
+    assert "Current phase: planning" in result.stdout
 
     events_path = target_project / ".ai-team" / "runs" / run_id / "events.jsonl"
     events = [
         json.loads(line)
         for line in events_path.read_text().splitlines()
     ]
-    assert events[-1]["event_type"] == "run.resumed"
+    event_types = [e["event_type"] for e in events]
+    assert "run.resumed" in event_types
+    assert "phase.advanced" in event_types
+    assert "plan.created" in event_types

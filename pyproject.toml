@@ -5,6 +5,7 @@ description = "Learning-first AI Software Team walking skeleton."
 readme = "CONTEXT.md"
 requires-python = ">=3.12"
 dependencies = [
+    "google-adk>=1.32.0",
     "langfuse>=4.5.1",
 ]
 
