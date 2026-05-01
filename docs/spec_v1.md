@@ -95,7 +95,9 @@ The starting model provider is Google/Gemini. Provider and model should be confi
 
 The AI Software Team System uses `pytest` for v1 tests.
 
-Milestone 1 tests should cover:
+Each milestone defines its own test expectations. Tests stay local and deterministic by default: no real GitHub, Langfuse, or network access required unless a milestone explicitly introduces an integration test behind an opt-in marker.
+
+**Walking Skeleton (Milestone 1)** tests cover:
 
 - run directory creation
 - `state.json` persistence
@@ -268,29 +270,136 @@ Examples:
 - model provider configuration
 - Langfuse configuration
 
-## Milestone 1: Walking Skeleton
+## V1 Implementation Milestones
 
-The first milestone proves the system shape before full automation.
+The milestones below decompose v1 into sequential deliveries. **Milestone 1** is the Walking Skeleton. **Milestones 2–6** complete the v1 **Delivery Workflow**, **Agent Stack**, **Run Artifacts**, and **GitHub Workspace** described elsewhere in this document. After **Milestone 6**, the behaviors in this spec are implemented end-to-end (subject to non-goals).
 
-Scope:
+### Milestone 1: Walking Skeleton
 
-- `ai-team start`
-- PM discovery chat
-- `spec.md` creation
-- `state.json` creation
-- `events.jsonl` timeline
-- run directory creation
-- `ai-team status`
-- `ai-team resume <run-id>`
-- Langfuse trace emission when configured
+Proves run layout, CLI entrypoints, local timeline, and tracing integration before multi-agent automation.
 
-Out of scope for Milestone 1:
+**Scope**
 
-- GitHub issue creation
-- worktree management
-- Developer/QA/Reviewer automation
-- code implementation
-- draft PR creation
+- `ai-team start`, `ai-team status`, `ai-team resume <run-id>`
+- User discovery via CLI prompts and flags (structured input; not yet an LLM **PM Agent**)
+- `spec.md` creation from discovery answers
+- Run directory creation under `.ai-team/runs/<run-id>/`
+- `state.json` and `events.jsonl`
+- Langfuse trace emission when configured; safe fallback when not configured or unavailable
+
+**Out of scope**
+
+- ADK/A2A/MCP, versioned **Agent Prompts**, and LLM-backed agents
+- `plan.md`, `handoffs/`, GitHub, **Run Worktree**, implementation, QA, review, draft PR
+
+**Completion criteria**
+
+- Milestone 1 system tests pass (see **System Testing**).
+- A new run produces `spec.md`, `state.json`, and a chronological `events.jsonl`.
+
+### Milestone 2: Agent stack, orchestration, and planning
+
+Introduces the **ADK Layer**, **A2A Layer**, configurable **Model Provider** (Google/Gemini default), and the **Architect Agent** through the planning phase.
+
+**Scope**
+
+- `prompts/pm.md`, `prompts/architect.md` (and stub or minimal placeholders for `developer.md`, `qa.md`, `reviewer.md` if required by the runner)
+- LLM-backed **PM Agent** for discovery and specification (replacing or augmenting pure CLI discovery while preserving **Discovery Gate** invariants)
+- Central orchestration: phase transitions Discovery → Specification → Planning recorded in `state.json`
+- **A2A**: durable handoff records under `handoffs/` (for example PM → Architect) plus matching `events.jsonl` entries
+- Read-only **MCP Layer** or MCP-like adapters for Target Project inspection (filesystem/repo listing and targeted reads) used by the **Architect Agent**
+- `plan.md` per **Implementation Plan** definition in this spec
+- Langfuse observes agent and handoff activity for the **AI Software Team System**
+
+**Out of scope**
+
+- GitHub issue creation, **Run Worktree**, code implementation, QA, Reviewer, draft PR
+
+**Completion criteria**
+
+- From an approved **Discovery Gate**, a run reaches a planning phase and writes `plan.md` grounded in Target Project inspection.
+- `handoffs/` contains explicit PM → Architect (and return) handoff summaries; tests use mocked LLM and tool responses where needed.
+
+### Milestone 3: GitHub issue breakdown
+
+Connects the **GitHub Workspace** for issue tracking and records the breakdown as a run artifact.
+
+**Scope**
+
+- MCP or MCP-like GitHub adapter for creating a **Slice Issue** and optional child issues when they add clarity
+- `issues.md` summarizing created issues and links
+- **Approval Checkpoint** before creating GitHub issues; `state.json` stores issue URLs and identifiers
+- Phase transition: Planning → Issue Breakdown (or equivalent phase name in `state.json`)
+
+**Out of scope**
+
+- **Run Worktree**, Developer implementation, QA, Reviewer, draft PR
+
+**Completion criteria**
+
+- With user approval and mocked or test GitHub API, the PM path creates the configured issues and persists links in `state.json` and `issues.md`.
+- Default suite remains deterministic (no live GitHub).
+
+### Milestone 4: Run worktree and Developer implementation
+
+Adds isolated git work and the **Developer Agent** with **Checkpoint Commits**.
+
+**Scope**
+
+- Create and record a **Run Worktree** and branch for the run; store paths in `state.json`
+- **Developer Agent** with `prompts/developer.md` implements the **Product Slice** per `plan.md` and linked issues
+- **Checkpoint Commits** in the worktree only (no merge, no branch deletion)
+- Phase transition through Implementation; `events.jsonl` records implementation milestones
+
+**Out of scope**
+
+- QA, Reviewer, draft PR (implementation may be “best effort” locally but not validated by QA agent yet)
+
+**Completion criteria**
+
+- Tests use a local git fixture repository: worktree creation, branch isolation, and at least one checkpoint commit recorded in run state or events.
+- User’s primary working tree is not required for agent edits.
+
+### Milestone 5: QA, Reviewer, and bounded repair loops
+
+Adds validation and code review agents with the v1 **Repair Loop** caps.
+
+**Scope**
+
+- `prompts/qa.md`, `prompts/reviewer.md`
+- **QA Agent** produces `qa-report.md` classifying **Blocking Issues** vs **Non-Blocking Notes**
+- **Reviewer Agent** produces `review.md` with the same classification
+- Bounded repair: at most two Developer↔QA repair cycles and two Developer↔Reviewer repair cycles per run phase model; then `state.json` marks the run blocked for user input
+- Phases for Validation and Review recorded in `state.json` and `events.jsonl`
+
+**Out of scope**
+
+- Opening the draft PR and final **Delivery** artifact (`delivery.md`)
+
+**Completion criteria**
+
+- Tests demonstrate pass path, repair path within limits, and blocked path when limits exceeded.
+- Artifacts match the semantics in **QA And Review**.
+
+### Milestone 6: Delivery (draft pull request)
+
+Completes the **Delivery Workflow** with user-approved publish steps and a draft PR.
+
+**Scope**
+
+- **Approval Checkpoint** before push and before opening the draft PR
+- **PM Agent** (or orchestration edge) opens a **Draft Pull Request** meeting **GitHub Delivery** content requirements
+- `delivery.md` with summary, linked issue, acceptance checklist, change overview, test commands and results, pointers to `qa-report.md` / `review.md`, non-blocking notes, and user review guidance
+- Final phase and resumability: delivery complete vs blocked matches **Approval Boundaries**
+
+**Out of scope**
+
+- Anything listed under **Non-Goals** (merge, deploy previews, hosted DB provisioning, etc.)
+
+**Completion criteria**
+
+- End-to-end dry run in tests: from existing run state fixtures or a scripted happy path through draft PR creation with GitHub API mocked.
+- Full v1 workflow in this spec is achievable in one run when external services are configured.
 
 ## Future Learning Branches
 
