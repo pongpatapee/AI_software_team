@@ -86,6 +86,16 @@ def timestamp() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def advance_phase(run_dir: Path, new_phase: str) -> None:
+    """Update state.json to new_phase and log a phase.advanced event."""
+    state_path = run_dir / "state.json"
+    state = json.loads(state_path.read_text())
+    state["phase"] = new_phase
+    state["updated_at"] = timestamp()
+    write_json(state_path, state)
+    append_event(run_dir, "phase.advanced", {"phase": new_phase})
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
