@@ -48,7 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def start_command(args: argparse.Namespace) -> int:
-    answers = collect_discovery_answers(args)
+    if _should_use_pm_conversation(args):
+        answers = run_pm_discovery_conversation(args.target_project)
+    else:
+        answers = collect_discovery_answers(args)
 
     with SystemTracer() as tracer:
         tracer.event(
@@ -62,6 +65,43 @@ def start_command(args: argparse.Namespace) -> int:
     print(f"Run directory: {answers.target_project.resolve() / '.ai-team' / 'runs' / state['run_id']}")
     print(f"Resume with: {state['resume_command']}")
     return 0
+
+
+def _should_use_pm_conversation(args: argparse.Namespace) -> bool:
+    return not args.product_slice
+
+
+def run_pm_discovery_conversation(target_project: Path) -> DiscoveryAnswers:
+    from ai_software_team.agents.pm_discovery import PMDiscoverySession
+
+    model = _resolve_pm_model()
+    session = PMDiscoverySession(model, target_project)
+
+    print("PM Agent: Hello! I'm here to help define your Product Slice.")
+    print("PM Agent: What would you like to build?\n")
+
+    done = False
+    while not done:
+        try:
+            user_input = input("You: ").strip()
+        except EOFError:
+            break
+        if not user_input:
+            continue
+        response, done = session.send(user_input)
+        print(f"\nPM Agent: {response}\n")
+
+    answers = session.extract_answers()
+    print("PM Agent: Discovery complete. Creating your run...\n")
+    answers = DiscoveryAnswers(
+        target_project=answers.target_project,
+        product_slice=answers.product_slice,
+        user_goal=answers.user_goal,
+        acceptance_criteria=answers.acceptance_criteria,
+        constraints=answers.constraints,
+        approved=True,
+    )
+    return answers
 
 
 def status_command(args: argparse.Namespace) -> int:
@@ -111,7 +151,7 @@ def _should_run_planning(state: dict) -> bool:
 
 
 def _resolve_model():
-    """Return a model for agent invocations. Supports AI_TEAM_TEST_MODEL=fake for tests."""
+    """Return a model for planning agents. Supports AI_TEAM_TEST_MODEL=fake for tests."""
     if os.getenv("AI_TEAM_TEST_MODEL") == "fake":
         from ai_software_team.agents.testing import FakeLlm
 
@@ -121,8 +161,18 @@ def _resolve_model():
                 "## Implementation Plan\n\n### Tasks\n1. Implement the requested changes.",
             ]
         )
-    model_name = os.getenv("AI_TEAM_MODEL", "gemini-2.0-flash")
-    return model_name
+    return os.getenv("AI_TEAM_MODEL", "gemini-2.0-flash")
+
+
+def _resolve_pm_model():
+    """Return a model for the PM discovery conversation."""
+    if os.getenv("AI_TEAM_TEST_MODEL") == "fake":
+        from ai_software_team.agents.testing import FakeLlm
+
+        raw_responses = os.getenv("AI_TEAM_TEST_PM_RESPONSES", "")
+        responses = [raw_responses] if raw_responses else ["[READY]"]
+        return FakeLlm(responses=responses)
+    return os.getenv("AI_TEAM_MODEL", "gemini-2.0-flash")
 
 
 def format_state(state: dict[str, object]) -> str:
