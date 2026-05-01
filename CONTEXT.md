@@ -20,6 +20,10 @@ _Avoid_: Target stack, generated app stack
 The local Python package for the **AI Software Team System**, managed with `uv` and exposed through the `ai-team` CLI.
 _Avoid_: Script folder, web service
 
+**System Test Suite**:
+The `pytest` test suite for the **AI Software Team System** codebase.
+_Avoid_: Target project tests, ad hoc test scripts
+
 **Model Provider**:
 The configurable LLM provider used by all v1 agents, defaulting to Google/Gemini.
 _Avoid_: Per-agent routing, hardcoded model
@@ -202,6 +206,7 @@ _Avoid_: Ad hoc schema edits, manual SQL-only schema changes
 - The **AI Software Team System** is built in this repository
 - The **AI Software Team System** uses the **System Stack**
 - The **AI Software Team System** is distributed locally as the **System Package**
+- The **System Test Suite** uses `pytest`
 - The **AI Software Team System** uses one configurable **Model Provider** for all v1 agents
 - **Agent Prompts** are stored as versioned files and loaded by the **AI Software Team System**
 - The **AI Software Team System** creates or modifies **Target Projects**
@@ -278,6 +283,7 @@ _Avoid_: Ad hoc schema edits, manual SQL-only schema changes
 - "Project codebase" could mean either this repository or the generated software repository — resolved: this repository contains the **AI Software Team System**, while generated or modified repositories are **Target Projects**.
 - "Python stack" could refer to either the orchestrator or generated projects — resolved: the **System Stack** is Python for the **AI Software Team System**, while the **Primary Target Stack** is Python, FastAPI, React, and Postgres for new **Target Projects**.
 - "System interface" could imply a service or loose scripts — resolved: the **AI Software Team System** is a `uv`-managed **System Package** with an `ai-team` CLI.
+- "Tests" could refer to generated project tests or this repository's tests — resolved: the **System Test Suite** is this repository's `pytest` suite.
 - "Model configuration" could imply per-agent routing — resolved: v1 uses one configurable **Model Provider** across all agents, starting with Google/Gemini.
 - "Agent behavior" could be hidden in code or prompts alone — resolved: **Agent Prompts** are versioned files, while workflow invariants are enforced in code.
 - "New project stack choice" could mean agents choose unilaterally — resolved: the **PM Agent** asks for user preference first, and the **Architect Agent** recommends a **Target Stack** only as a fallback.
